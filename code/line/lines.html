@@ -1,0 +1,90 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <link rel="stylesheet"
+              href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/default.min.css">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+    </head>
+<body>
+
+
+<pre><code class="language-c">
+#include &lt;glad/glad.h>
+#include &lt;GLFW/glfw3.h>
+
+
+#include "rectangle.h"
+#include "shader.h"
+
+#include &lt;stdlib.h>
+
+#define MAX_POINTS_LEN 2000
+
+
+typedef struct {
+    Rectangle rect;
+    float* points;
+    int n_points;
+} Line;
+
+
+Line line_create(float* points, int n_points, float thickness)
+{
+    int n_lines = n_points - 1;
+    int n_squares = n_lines - 1;
+    int n = n_lines + n_squares;
+    float cxs[n];
+    float cys[n];
+    float ws[n];
+    float hs[n];
+    float angles[n];
+    for (int i = 0; i &lt; n_lines; i++) 
+    {
+        float p1[2] = {points[2*i], points[2*i+1]};
+        float p2[2] = {points[2*(i+1)], points[2*(i+1)+1]};
+        hs[i] = thickness;
+        ws[i] = sqrtf(powf(p2[0]-p1[0], 2.0) + powf(p2[1]-p1[1], 2.0f));
+        angles[i] = atan2f(p2[1]-p1[1], p2[0]-p1[0]);
+        cxs[i] = (p2[0] + p1[0]) / 2.0f;
+        cys[i] = (p2[1] + p1[1]) / 2.0f;
+    }
+
+    for (int i=0; i &lt; n_squares; i++) 
+    {
+        float cx0 = points[2*(i+1)];
+        float cy0 = points[2*(i+1)+1];
+        float cx1 = cx0-thickness/2.0f*sinf(angles[i]);
+        float cy1 = cy0+thickness/2.0f*cosf(angles[i]);
+        float cx2 = cx0-thickness/2.0f*sinf(angles[i+1]);
+        float cy2 = cy0+thickness/2.0f*cosf(angles[i+1]);
+
+        float opx = 2.0 * cx0 - cx1;
+        float opy = 2.0 * cy0 - cy1;
+
+        hs[n_lines+i] = sqrtf(powf(cx2-opx, 2.0f) + powf(cy2-opy, 2.0f));
+        ws[n_lines+i] = sqrtf(powf(cx2-cx1, 2.0) + powf(cy2-cy1, 2.0f));
+        angles[n_lines+i] = atan2f(cy2-cy1, cx2-cx1);
+        cxs[n_lines+i] = cx0;
+        cys[n_lines+i] = cy0;
+    }
+
+    Line line;
+    line.rect = rect_init_instanced(ws, hs, angles, cxs, cys, n);
+    line.points = points;
+    line.n_points = n_points;
+
+    return line;
+}
+
+
+void line_draw(Line* line)
+{
+    rect_draw_instanced(&(line->rect), 2*line->n_points-3);
+}
+    </code></pre>
+
+
+    <script>hljs.highlightAll();</script>
+
+</body>
+

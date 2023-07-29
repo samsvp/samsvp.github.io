@@ -1,3 +1,4 @@
+<!DOCTYPE HTML>
 <html>
     <head>
         <link rel="stylesheet"
@@ -11,64 +12,11 @@
 #ifndef SV_UTILS_H
 #define SV_UTILS_H
 
-#include "glad/glad.h"
-#include "GLFW/glfw3.h"
+#include &lt;glad/glad.h&gt;
+#include &lt;GLFW/glfw3.h&gt;
 
-#include "stdio.h"
-#include "stdlib.h"
-#include "stdbool.h"
-
-
-void framebuffer_size_callback(GLFWwindow* window, int width, int height)
-{
-    glViewport(0, 0, width, height);
-}
-void process_input(GLFWwindow *window)
-{
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, true);
-}
-void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
-{}
-
-
-GLFWwindow* window_init(int scr_width, int scr_height)
-{
-    // glfw: initialize and configure
-    // ------------------------------
-    glfwInit();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_SAMPLES, 4);
-#ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#endif
-
-    // glfw window creation
-    // --------------------
-    GLFWwindow* window = glfwCreateWindow(scr_width, scr_height, "LearnOpenGL", NULL, NULL);
-    if (window == NULL) {
-        printf("Failed to create GLFW window\n");
-        glfwTerminate();
-        return NULL;
-    }
-    glfwMakeContextCurrent(window);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetMouseButtonCallback(window, mouse_button_callback);
-    // glad: load all OpenGL function pointers
-    // ---------------------------------------
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        printf("Failed to initialize GLAD\n");
-        return NULL;
-    }
-
-    glEnable(GL_MULTISAMPLE);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    return window;
-}
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
 
 
 char* read_file(const char* path)

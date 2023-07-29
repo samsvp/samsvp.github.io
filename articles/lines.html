@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <link rel="stylesheet" href="/static/styles/style.css">
+        <link rel="stylesheet" href="/static/styles/sidebar.css">
+        <link href='https://fonts.googleapis.com/css?family=Mulish' rel='stylesheet'>
+        <link rel="stylesheet"
+              href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/default.min.css">
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+        <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3.0.1/es5/tex-mml-chtml.js"></script>
+    </head>
+<body>
+
+<div class="sidebar">
+  <a href="./index.html">Home</a>
+  <a href="articles.html">Articles</a>
+  <a href="#about">About</a>
+</div>
+
+<div class="content">
+    <h2>Drawing Lines Using OpenGL and GLFW</h2>
+
+    <p>Drawing lines in OpenGL is surprisingly not simple. Some GPUs are able to render lines in the range of [1, 2048] pixels, while others have a fixed line size of 1.0 pixel. This means that some users will see thicker lines than others (realistically, the other users are you on other computers). Your anti-aliasing options are also limited at best, with your only option being turning AA on or off with glEnable(GL_LINE_SMOOTH).</p>
+
+    <p>So, what's the solution? Well, you draw your own lines using squares, of course. Here we will write a C program using GLFW to draw some smooth lines. As a line will be a collection of squares (the GPU will have to draw number-of-points - 1 squares) we will use instancing. If you don't know about instancing I recommend the <a href="https://learnopengl.com/Advanced-OpenGL/Instancing">LearnOpenGL article about it</a></p>
+    
+    <h2>Instancing Rectangles</h2>
+    Before we properly start, we must write the code for instanced rectangles. First we will create our rectangle struct
+    <pre><code>
+typedef struct {
+    unsigned int VBO;
+    unsigned int EBO;
+    unsigned int VAO;
+    unsigned int shader_id;
+    float R[16];
+} Rectangle;
+    </code></pre>
+
+    <p>It will hold the VAO needed to draw it as well as the EBO and VBO generated. R is the matrix which will be passed to the shader to do the necessary transformations to our rectangle based on the previous parameters. It also holds its shader program id to bind it once we need to draw it.</p>
+
+    <p>Before writing the code to initialize and render the rectangle, let's write the code to free its resources</p>
+    <pre><code>
+void rect_free(Rectangle* rect)
+{
+    glDeleteVertexArrays(1, &(rect->VAO));
+    glDeleteBuffers(1, &(rect->VBO));
+    glDeleteBuffers(1, &(rect->EBO));
+    glDeleteProgram(rect->shader_id);
+}
+    </code></pre>
+
+    It just cleans up the VAO, VBO, EBO and deletes the compiled shader program.
+
+    Next we can create the function to create our base rectangle
+    <pre><code>
+Rectangle rect_init(unsigned int shader_id)
+{
+    Rectangle rect;
+    float vertices[] = {
+         0.5f,   0.5, 0.0f,  // top right
+         0.5f,  -0.5f, 0.0f,  // bottom right
+        -0.5f, -0.5f, 0.0f,  // bottom left
+        -0.5f,  0.5f, 0.0f   // top left 
+    };
+    unsigned int indices[] = {  // note that we start from 0!
+        0, 1, 3,  // first Triangle
+        1, 2, 3   // second Triangle
+    };
+    glGenVertexArrays(1, &(rect.VAO));
+    glGenBuffers(1, &(rect.VBO));
+    glGenBuffers(1, &(rect.EBO));
+    // bind the Vertex Array Object first, then bind and set vertex buffer(s), 
+    // and then configure vertex attributes(s).
+    glBindVertexArray(rect.VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, rect.VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, rect.EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    // note that this is allowed, the call to glVertexAttribPointer registered VBO as
+    // the vertex attribute's bound vertex buffer object so afterwards we can 
+    // safely unbind
+    glBindBuffer(GL_ARRAY_BUFFER, 0); 
+
+    glBindVertexArray(0);
+
+    rect.shader_id = shader_id;
+    float R[] = 
+                { 1.0f,     0,    0,    0, // first column
+                     0,  1.0f,    0,    0,
+                     0,     0, 1.0f,    0,
+                     0,     0,    0, 1.0f}; // translation column
+    memcpy(rect.R, R, sizeof R);
+    return rect;
+}
+    </code></pre>
+
+    <p>This function is pretty simple. It just creates and returns a rectangle at the origin with sides equal to 1 unit and no rotation. The use must provide a shader program to be used when rendering the rectangle</p>
+
+    <p>We can now use this function as base for our instanced function.</p>
+    <pre><code>
+Rectangle rect_init_instanced(float* widths, float* heights, float* angles, float* cxs, float* cys, int count)
+{
+    uint64_t shader_program = compile_shader("shaders/instancing.vs", "shaders/default.fs");
+
+    Rectangle rect = rect_init(shader_program);
+    
+    float transforms[16 * count];
+    for (int index=0; index &lt; count; index++)
+    {
+        float angle = angles[index];
+        float cy = cys[index];
+        float cx = cxs[index];
+        float width = widths[index]; 
+        float height = heights[index];
+        float R[16] = { 
+            width * cos(angle), width * sin(angle), 0, 0, // first column
+            height * -sin(angle), height * cos(angle), 0, 0,
+            0, 0, 1.0f, 0,
+            cx, cy, 0, 1.0f  // translation column
+        };
+        for (int i=0; i&lt;16;i++) {
+            transforms[16*index+i] = R[i];
+        }
+    }
+
+    unsigned int instanceVBO;
+    glGenBuffers(1, &instanceVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(transforms), transforms, GL_STATIC_DRAW);
+
+    glBindVertexArray(rect.VAO);
+    // also set instance data
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 16*sizeof(float), (void*)0);
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 16*sizeof(float), (void*)(4*sizeof(float)));
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 16*sizeof(float), (void*)(8*sizeof(float)));
+    glEnableVertexAttribArray(4);
+    glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 16*sizeof(float), (void*)(12*sizeof(float)));
+
+    glVertexAttribDivisor(1, 1);
+    glVertexAttribDivisor(2, 1);
+    glVertexAttribDivisor(3, 1);
+    glVertexAttribDivisor(4, 1);
+
+    glBindVertexArray(0);
+
+    return rect;
+}
+    </code></pre>
+
+    <p>The rect_init_instanced function takes care of the instancing. You must pass how many rectangles you want to set and a widths, heights, cxs(x axis center), cys(y axis center) and angles array for each instance. We then calculate the R matrix for each rectangle to do the necessary transforms. The rest is pure boilerplate to create our instance rectangle.</p> 
+    
+    <p>Here are the shaders code</p>
+    <pre><code>
+#version 330 core
+// vertex shader
+layout (location = 0) in vec2 aPos;
+layout (location = 1) in mat4 transform;
+
+void main()
+{
+	gl_Position = transform * vec4(aPos, 0, 1.0);
+}
+    </code></pre>
+    <pre><code>
+#version 330 core
+// fragment shader
+out vec4 FragColor;
+in vec2 TexCoord;
+void main()
+{
+	FragColor = vec4(1.0f, 1.0f, 1.0f, 1.0f);
+}
+    </code></pre>
+    <p>Here is a link for the functions used to compile the shaders
+        <a href="code/line/util.html">utils.h</a>
+        <a href="code/line/shader.html">shader.h</a>
+    </p>
+
+    <p>Now we just got to define a function to draw our rectangles. It will take a rectangle as input as well as how many we want to draw.</p>
+    
+    <pre><code>
+void rect_draw_instanced(Rectangle* rect, int count)
+{
+    glUseProgram(rect->shader_id);
+    glBindVertexArray(rect->VAO);
+    glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, count);
+}
+    </code></pre>
+
+    <p>And with that we're done. Now we can start thinking about how to draw our line</p>
+    
+    <h2>Drawing Lines: The Math</h2>
+    <p>To draw a line we need to calculate three things: The length of the line, the angle and the position. Considering two points \(p_1=\{x_1, y_1\},\ p_2=\{x_2, y_2\}\), their distance \(d=\sqrt{(x_2-x_1)^2+(y_2-y_1)^2}\) is the length of the line we want to draw. The angle is \(\theta=atan2(y_2-y_1, x_2-x_1)\). Finally, the position. We will always do the transformations based on rectangles center, so the position of our line will be \(p=\{\frac{x_1+x_2}{2}, \frac{y_2+y_1}{2}\}\), which is at the point in the middle of \(p_1\) and \(p_2\). We also set a fixed width for our line.</p>
+    <p>We will apply the transformations all at once on our rectangle using a \(4x4\) matrix. It will do the stretching, rotation and translation. The matrix has this form</p> 
+    <p style="text-align: center;">\(T=\begin{bmatrix}wcos(\theta) & -hsin(\theta) & 0 & t_x \\ wsin(\theta) & hcos(\theta) & 0 & t_y \\ 0 & 0 & 1 & 0 \\ 0 & 0 & 0 & 1 \end{bmatrix}\)</p> 
+    <p>For simplicity, our lines live in a 2d world. If you want to make a 3D line, then you need to expand the 2D rotation matrix into a 3D one and add \(t_z\) to the translation part.).</p>
+    <p>Here are some images displaying the transformations happening to our rectangle.</p>
+    <img src="images/line/box.png" alt="The box" width="300px">
+    <img src="images/line/stretch.png" alt="Streching" width="300px">
+    <img src="images/line/rotate.png" alt="Rotating" width="300px">
+    <img src="images/line/translate.png" alt="Translating" width="300px">
+
+    <p>Let's code these transformations in a function called \(line\_create\)</p>
+<pre><code>
+Line line_create(float* points, int n_points, float thickness)
+{
+    int n_lines = n_points - 1;
+    float cxs[n_lines];
+    float cys[n_lines];
+    float ws[n_lines];
+    float hs[n_lines];
+    float angles[n_lines];
+    for (int i = 0; i &lt; n_lines; i++) 
+    {
+        float p1[2] = {points[2*i], points[2*i+1]};
+        float p2[2] = {points[2*(i+1)], points[2*(i+1)+1]};
+        hs[i] = thickness;
+        ws[i] = sqrtf(powf(p2[0]-p1[0], 2.0) + powf(p2[1]-p1[1], 2.0f));
+        angles[i] = atan2f(p2[1]-p1[1], p2[0]-p1[0]);
+        cxs[i] = (p2[0] + p1[0]) / 2.0f;
+        cys[i] = (p2[1] + p1[1]) / 2.0f;
+    }
+
+    Line line;
+    line.rect = rect_init_instanced(ws, hs, angles, cxs, cys, n_lines);
+    line.points = points;
+    line.n_points = n_points;
+
+    return line;
+}
+</code></pre>
+    <p>We pass a list of points and the amount of points inside the list and calculate the parameters of our transformation matrix. We then call \(rect\_init\_instanced\) with the calculated values to create our lines and save the returned rect into a new line struct, as well as the points passed and the number of points.</p>
+    <p>Here is the line struct</p>
+<pre><code>
+typedef struct {
+    Rectangle rect;
+    float* points;
+    int n_points;
+} Line;
+</code></pre>
+
+    <p>There is, however, still one problem. Here is a drawing of how our lines will look if we draw it.</p>
+
+    <img src="images/line/intersection.png" alt="Intersection" width="300px">
+
+    <p>We may say that our lines are stylized and that's totally what we want, but people will surely reply that our style is quite awful. We can fill these gaps in many ways, but we will choose one of the simplest: we draw another rectangle to fill the gap. The most astute readers may notice that the gap is a triangle, so we don't actually need a square, and that's true, but I don't want to write the code to render instanced triangles, so rectangles it is.</p>
+    <p>Let's take three points, \(p_{n-1}, p_n, p_{n+1}\). We drew the lines linking \(p_{n-1}, p_n\) and \(p_n, p_{n+1}\) and now we will fill the gap drawing another triangle. The center of the rectangle is given by \(p_n\). Now we need to calculate the width, height and angle.</p>
+    <p>The width is the just the size of the gap, but to get it we need to calculate the two edge points. To get each point we use this formula \(x_i=x_n-\frac{th}{2}sin(\theta_i)\) and \(y_i=y_n+\frac{th}{2}cos(\theta_i)\) where \(i=\{1,2\}\) representing the blue line and the magenta line in our pictures. Anyway, here are the pictures to illustrate the example</p>
+    <img src="images/line/edges.png" alt="Edges" width="300px">
+    <img src="images/line/int_rect1.png" alt="" width="300px">
+
+    <p>The rectangles angle will be the angle between \(x_1, y_1\) and \(x_2, y_2\). The height we can get by reflecting \(x_1, y_1\) around \(x_n, y_n\) with the formula \(x_{m1}=2.0 * x_n - x_1\) and \(y_{m1}=2.0*y_n-y_1\) and calculating the distance between both points (you could also get the minimum distance between \(x_1, y_1\) and the center of the line).</p>
+    <img src="images/line/int_rect_reflection.png" alt="Reflection" width="300px">
+    <p>So now that we have the math down, we can code it</p>
+<pre><code>
+Line line_create(float* points, int n_points, float thickness)
+{
+    int n_lines = n_points - 1;
+    int n_squares = n_lines - 1;
+    int n = n_lines + n_squares;
+    float cxs[n];
+    float cys[n];
+    float ws[n];
+    float hs[n];
+    float angles[n];
+
+    for (int i = 0; i \lt; n_lines; i++) 
+    {/*previous code*/}
+    for (int i=0; i \lt; n_squares; i++) 
+    {
+        float cx0 = points[2*(i+1)];
+        float cy0 = points[2*(i+1)+1];
+        float cx1 = cx0-thickness/2.0f*sinf(angles[i]);
+        float cy1 = cy0+thickness/2.0f*cosf(angles[i]);
+        float cx2 = cx0-thickness/2.0f*sinf(angles[i+1]);
+        float cy2 = cy0+thickness/2.0f*cosf(angles[i+1]);
+
+        float opx = 2.0 * cx0 - cx1;
+        float opy = 2.0 * cy0 - cy1;
+
+        hs[n_lines+i] = sqrtf(powf(cx2-opx, 2.0f) + powf(cy2-opy, 2.0f));
+        ws[n_lines+i] = sqrtf(powf(cx2-cx1, 2.0) + powf(cy2-cy1, 2.0f));
+        angles[n_lines+i] = atan2f(cy2-cy1, cx2-cx1);
+        cxs[n_lines+i] = cx0;
+        cys[n_lines+i] = cy0;
+    }
+
+    Line line;
+    line.rect = rect_init_instanced(ws, hs, angles, cxs, cys, n);
+    line.points = points;
+    line.n_points = n_points;
+
+    return line;
+}
+</code></pre>
+    <p>We do all the calculations and add the necessary rectangles to fill the gaps. Now, to draw it.</p>
+
+    <h2>Drawing the Line</h2>
+    <p>Drawing it is quite simple, we just need to call our \(rect\_draw\_instanced\) function.</p>
+    <pre><code>
+void line_draw(Line* line)
+{
+    rect_draw_instanced(&(line->rect), 2*line->n_points-3);
+}
+    </code></pre>
+    <p>Yes, that's it. Now let's write a test program</p>
+
+    <h2>Test Program</h2>
+    <p>Here is a simple test program to draw some lines on the screen</p>
+    <pre><code>
+#include &lt;glad/glad.h>
+#include &lt;GLFW/glfw3.h>
+
+#include "include/window.h"
+#include "include/shader.h"
+#include "include/lines.h"
+
+#include &lt;math.h>
+#include &lt;stdint.h>
+#include &lt;stdio.h>
+#include &lt;stdbool.h>
+
+int main(void)
+{
+    GLFWwindow* window = window_init(800, 600);
+    if (window == NULL) {
+        return -1;
+    }
+
+    int n_points = 9;
+    float line_points[18] = {
+        0.0f, 0.0f, 
+        0.3f, 0.8f, 
+        0.5f, 0.3f,
+        1.0f, 0.5f, 
+        0.5f, -0.8f, 
+        -0.5, 0.6f, 
+        -0.8f, 0.0f, 
+        0.8f, -0.5f, 
+        0.0f, 0.5f
+    };
+
+    Line line = line_create(line_points, n_points, 0.01f);
+        
+    while (!glfwWindowShouldClose(window)) 
+    {
+        // input
+        // -----
+        process_input(window);
+
+        // render
+        // ------
+        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        line_draw(&line);
+
+        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
+        // -------------------------------------------------------------------------------
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+    }
+    return 0;
+}
+    </code></pre>
+    <p>Compile it with</p> 
+<pre><code>
+gcc main.c glad/glad.c -lglfw -lGL -lX11 -lpthread -lXrandr -lXi -ldl -lm
+</code></pre>
+    <p>Here are the files used for the example:</p>
+    <ul>
+        <li><a href="code/line/util.html">utils.h</a></li> 
+        <li><a href="code/line/shader.html">shader.h</a></li> 
+        <li><a href="code/line/window.html">window.h</a></li> 
+        <li><a href="code/line/rect.html">rect.h</a></li> 
+        <li><a href="code/line/lines.html">lines.h</a></li>
+    </ul>
+
+    <p>You may notice that we are using only header files. This makes compiling easier, although I do not recommend it for bigger projects.</p>
+</div>
+    <script>hljs.highlightAll();</script>
+</body>    
+</html>
+

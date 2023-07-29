@@ -1,0 +1,214 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <link rel="stylesheet"
+              href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/default.min.css">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+    </head>
+<body>
+
+
+<pre><code class="language-c">
+#ifndef SV_RECTANGLE_H
+#define SV_RECTANGLE_H
+
+#include &lt;glad/glad.h>
+#include &lt;GLFW/glfw3.h>
+
+#include "shader.h"
+
+#include &lt;math.h>
+#include &lt;string.h>
+
+
+#define RECT_DO_TRANSFORMS(rect, ...) do {\
+    __VA_ARGS__;\
+    rect_update(rect);\
+} while(0)
+
+
+typedef struct {
+    unsigned int VBO;
+    unsigned int EBO;
+    unsigned int VAO;
+    float cx;
+    float cy;
+    float width;
+    float height;
+    float angle;
+    unsigned int shader_id;
+    float R[16];
+} Rectangle;
+
+
+Rectangle rect_init(unsigned int shader_id)
+{
+    Rectangle rect;
+    float vertices[] = {
+         0.5f,   0.5, 0.0f,  // top right
+         0.5f,  -0.5f, 0.0f,  // bottom right
+        -0.5f, -0.5f, 0.0f,  // bottom left
+        -0.5f,  0.5f, 0.0f   // top left 
+    };
+    unsigned int indices[] = {  // note that we start from 0!
+        0, 1, 3,  // first Triangle
+        1, 2, 3   // second Triangle
+    };
+    glGenVertexArrays(1, &(rect.VAO));
+    glGenBuffers(1, &(rect.VBO));
+    glGenBuffers(1, &(rect.EBO));
+    // bind the Vertex Array Object first, then bind and set vertex buffer(s), 
+    // and then configure vertex attributes(s).
+    glBindVertexArray(rect.VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, rect.VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, rect.EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    // note that this is allowed, the call to glVertexAttribPointer registered VBO as
+    // the vertex attribute's bound vertex buffer object so afterwards we can 
+    // safely unbind
+    glBindBuffer(GL_ARRAY_BUFFER, 0); 
+
+    glBindVertexArray(0);
+
+    rect.shader_id = shader_id;
+    rect.cx = 0.0f;
+    rect.cy = 0.0f;
+    rect.width = 1.0f;
+    rect.height = 1.0f;
+    rect.angle = 0.0f;
+    float R[] = 
+                { 1.0f,     0,    0,    0, // first column
+                     0,  1.0f,    0,    0,
+                     0,     0, 1.0f,    0,
+                     0,     0,    0, 1.0f}; // translation column
+    memcpy(rect.R, R, sizeof R);
+    return rect;
+}
+
+
+Rectangle rect_init_instanced(float* widths, float* heights, float* angles, float* cxs, float* cys, int count)
+{
+    uint64_t shader_program = compile_shader("shaders/instancing.vs", "shaders/default.fs");
+
+    Rectangle rect = rect_init(shader_program);
+    
+    float transforms[16 * count];
+    for (int index=0; index&lt;count; index++)
+    {
+        float angle = angles[index];
+        float cy = cys[index];
+        float cx = cxs[index];
+        float width = widths[index]; 
+        float height = heights[index];
+        float R[16] = { 
+            width * cos(angle), width * sin(angle), 0, 0, // first column
+            height * -sin(angle), height * cos(angle), 0, 0,
+            0, 0, 1.0f, 0,
+            cx, cy, 0, 1.0f  // translation column
+        };
+        for (int i=0; i&lt;16;i++) {
+            transforms[16*index+i] = R[i];
+        }
+    }
+
+    unsigned int instanceVBO;
+    glGenBuffers(1, &instanceVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(transforms), transforms, GL_STATIC_DRAW);
+
+    glBindVertexArray(rect.VAO);
+    // also set instance data
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 16*sizeof(float), (void*)0);
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 16*sizeof(float), (void*)(4*sizeof(float)));
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 16*sizeof(float), (void*)(8*sizeof(float)));
+    glEnableVertexAttribArray(4);
+    glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 16*sizeof(float), (void*)(12*sizeof(float)));
+
+    glVertexAttribDivisor(1, 1);
+    glVertexAttribDivisor(2, 1);
+    glVertexAttribDivisor(3, 1);
+    glVertexAttribDivisor(4, 1);
+
+    glBindVertexArray(0);
+
+    return rect;
+}
+
+
+void rect_draw(Rectangle* rect)
+{
+    glUseProgram(rect->shader_id);
+    unsigned int transformLoc = glGetUniformLocation(rect->shader_id, "transform");
+    glUniformMatrix4fv(transformLoc, 1, GL_FALSE, rect->R);
+    glBindVertexArray(rect->VAO);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+}
+
+
+void rect_draw_instanced(Rectangle* rect, int count)
+{
+    glUseProgram(rect->shader_id);
+    glBindVertexArray(rect->VAO);
+    glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, count);
+}
+
+
+void rect_set_pos(Rectangle* rect, float cx, float cy)
+{
+    rect->cx = cx;
+    rect->cy = cy;
+}
+
+
+void rect_set_angle(Rectangle* rect, float angle)
+{
+    rect->angle = angle;
+}
+
+
+void rect_set_wh(Rectangle* rect, float w, float h)
+{
+    rect->width = w;
+    rect->height = h;
+}
+
+
+void rect_update(Rectangle* rect)
+{
+    rect->R[0] = rect->width * cos(rect->angle);
+    rect->R[1] = rect->width * sin(rect->angle);
+    rect->R[4] = rect->height * -sin(rect->angle);
+    rect->R[5] = rect->height * cos(rect->angle);
+
+    rect->R[12] = rect->cx;
+    rect->R[13] = rect->cy;
+}
+
+
+void rect_free(Rectangle* rect)
+{
+    glDeleteVertexArrays(1, &(rect->VAO));
+    glDeleteBuffers(1, &(rect->VBO));
+    glDeleteBuffers(1, &(rect->EBO));
+    glDeleteProgram(rect->shader_id);
+}
+
+#endif
+    </code></pre>
+
+
+    <script>hljs.highlightAll();</script>
+
+</body>
+
+
