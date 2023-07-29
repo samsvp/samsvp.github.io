@@ -206,10 +206,10 @@ void rect_draw_instanced(Rectangle* rect, int count)
     <p style="text-align: center;">\(T=\begin{bmatrix}wcos(\theta) & -hsin(\theta) & 0 & t_x \\ wsin(\theta) & hcos(\theta) & 0 & t_y \\ 0 & 0 & 1 & 0 \\ 0 & 0 & 0 & 1 \end{bmatrix}\)</p> 
     <p>For simplicity, our lines live in a 2d world. If you want to make a 3D line, then you need to expand the 2D rotation matrix into a 3D one and add \(t_z\) to the translation part.).</p>
     <p>Here are some images displaying the transformations happening to our rectangle.</p>
-    <img src="images/line/box.png" alt="The box" width="300px">
-    <img src="images/line/stretch.png" alt="Streching" width="300px">
-    <img src="images/line/rotate.png" alt="Rotating" width="300px">
-    <img src="images/line/translate.png" alt="Translating" width="300px">
+    <img src="/images/line/box.png" alt="The box" width="300px">
+    <img src="/images/line/stretch.png" alt="Streching" width="300px">
+    <img src="/images/line/rotate.png" alt="Rotating" width="300px">
+    <img src="/images/line/translate.png" alt="Translating" width="300px">
 
     <p>Let's code these transformations in a function called \(line\_create\)</p>
 <pre><code>
@@ -252,16 +252,16 @@ typedef struct {
 
     <p>There is, however, still one problem. Here is a drawing of how our lines will look if we draw it.</p>
 
-    <img src="images/line/intersection.png" alt="Intersection" width="300px">
+    <img src="/images/line/intersection.png" alt="Intersection" width="300px">
 
     <p>We may say that our lines are stylized and that's totally what we want, but people will surely reply that our style is quite awful. We can fill these gaps in many ways, but we will choose one of the simplest: we draw another rectangle to fill the gap. The most astute readers may notice that the gap is a triangle, so we don't actually need a square, and that's true, but I don't want to write the code to render instanced triangles, so rectangles it is.</p>
     <p>Let's take three points, \(p_{n-1}, p_n, p_{n+1}\). We drew the lines linking \(p_{n-1}, p_n\) and \(p_n, p_{n+1}\) and now we will fill the gap drawing another triangle. The center of the rectangle is given by \(p_n\). Now we need to calculate the width, height and angle.</p>
     <p>The width is the just the size of the gap, but to get it we need to calculate the two edge points. To get each point we use this formula \(x_i=x_n-\frac{th}{2}sin(\theta_i)\) and \(y_i=y_n+\frac{th}{2}cos(\theta_i)\) where \(i=\{1,2\}\) representing the blue line and the magenta line in our pictures. Anyway, here are the pictures to illustrate the example</p>
-    <img src="images/line/edges.png" alt="Edges" width="300px">
-    <img src="images/line/int_rect1.png" alt="" width="300px">
+    <img src="/images/line/edges.png" alt="Edges" width="300px">
+    <img src="/images/line/int_rect1.png" alt="" width="300px">
 
     <p>The rectangles angle will be the angle between \(x_1, y_1\) and \(x_2, y_2\). The height we can get by reflecting \(x_1, y_1\) around \(x_n, y_n\) with the formula \(x_{m1}=2.0 * x_n - x_1\) and \(y_{m1}=2.0*y_n-y_1\) and calculating the distance between both points (you could also get the minimum distance between \(x_1, y_1\) and the center of the line).</p>
-    <img src="images/line/int_rect_reflection.png" alt="Reflection" width="300px">
+    <img src="/images/line/int_rect_reflection.png" alt="Reflection" width="300px">
     <p>So now that we have the math down, we can code it</p>
 <pre><code>
 Line line_create(float* points, int n_points, float thickness)
@@ -380,11 +380,11 @@ gcc main.c glad/glad.c -lglfw -lGL -lX11 -lpthread -lXrandr -lXi -ldl -lm
 </code></pre>
     <p>Here are the files used for the example:</p>
     <ul>
-        <li><a href="code/line/util.html">utils.h</a></li> 
-        <li><a href="code/line/shader.html">shader.h</a></li> 
-        <li><a href="code/line/window.html">window.h</a></li> 
-        <li><a href="code/line/rect.html">rect.h</a></li> 
-        <li><a href="code/line/lines.html">lines.h</a></li>
+        <li><a href="/code/line/util.html">utils.h</a></li> 
+        <li><a href="/code/line/shader.html">shader.h</a></li> 
+        <li><a href="/code/line/window.html">window.h</a></li> 
+        <li><a href="/code/line/rect.html">rect.h</a></li> 
+        <li><a href="/code/line/lines.html">lines.h</a></li>
     </ul>
 
     <p>You may notice that we are using only header files. This makes compiling easier, although I do not recommend it for bigger projects.</p>
