@@ -1,0 +1,17 @@
+body {
+    color: white;
+    background-color: black;
+    font-size: 3.2vmin;
+}
+
+.loner {
+    display: "hidden";
+}
+
+.sidebar {
+    background-color: #333333;
+}
+
+.sidebar a {
+    color: white;
+}
