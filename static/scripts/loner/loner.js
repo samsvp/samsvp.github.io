@@ -1,6 +1,5 @@
 let vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
 let vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
-let dt = 10;
 
 let ps = document.getElementsByTagName("p");
 for (let i = 0; i < ps.length; i++) {
@@ -55,9 +54,9 @@ function getFontSize(p) {
  */
 function getDt(p) {
     if (p.hasAttribute("data-speed-mult")) {
-        return dt * 1.0 / p.getAttribute("data-speed-mult");
+        return 10 * 1.0 / p.getAttribute("data-speed-mult");
     }
-    return dt;
+    return 10;
 }
 
 /**
@@ -130,7 +129,7 @@ function advance(flushWrite) {
     }
 
     const p = ps[currentPIndex++];
-    dt = getDt(p);
+    let dt = getDt(p);
     p.style.display = "";
     writeText(p, dt);
 
@@ -177,12 +176,21 @@ function blinkingCursor() {
     }, 1);
 }
 
-addEventListener("keydown", (_) => {
-    advance(true);
-});
-addEventListener("touchstart", (_) => {
-    advance(true);
-});
+["keydown", "touchstart", "click"].forEach(
+    (event_name) => window.addEventListener(
+        event_name,
+        (e) => {
+            let j = e.key == 'j';
+            if (j) {
+                advance(true);
+                return;
+            }
+            if (doneWriting) {
+                advance(true);
+            }
+        }
+    )
+);
 
 advance(true);
 blinkingCursor();
