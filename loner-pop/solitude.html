@@ -3,6 +3,7 @@
     <head>
         <meta charset="utf-8">
 
+        <script src="/static/scripts/loner/sidebar.js"></script>
         <script src="/static/scripts/loner/loner.js" defer></script>
 
         <link rel="stylesheet" href="/static/styles/style.css">
@@ -14,11 +15,6 @@
     </head>
 
     <body>
-        <div class="sidebar">
-            <a href="/loner-pop/ansiedade.html">Ansiedade</a>
-            <a href="/loner-pop/solitude.html" class="active">Solitude</a>
-        </div>
-
         <div class="content loner">
             <p>
             Indo e vindo, todo o dia, indo e vindo, sempre igual, tão sozinho, sem nada para mim.
@@ -80,5 +76,9 @@
             </p>
 
         </div>
+
+        <script>
+            createSidebar("solitude");
+        </script>
     </body>
 </html>

@@ -1,9 +1,14 @@
 let vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
 let vh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
 
-let ps = document.getElementsByTagName("p");
+let ps = [...document.getElementsByTagName("p")];
 for (let i = 0; i < ps.length; i++) {
     ps[i].style.display = "none";
+}
+let loop = false;
+if (shouldLoop(ps[0])) {
+    ps = ps.slice(1);
+    loop = true;
 }
 
 let div = document.getElementsByTagName("div")[0];
@@ -31,6 +36,13 @@ function shouldContinue(p) {
  */
 function shouldFontFade(p) {
     return p.hasAttribute("data-fontsize-fade");
+}
+
+/**
+ * @param {HTMLParagraphElement} p
+ */
+function shouldLoop(p) {
+    return p.hasAttribute("data-loop");
 }
 
 /**
@@ -66,7 +78,6 @@ function getDt(p) {
  */
 function writeToPosition(p, text, i, addCursor) {
     let [maxFontSize, minFontSize] = getFontSize(p);
-    console.log(maxFontSize);
     let html = "";
     let currentSize = 0;
     for (let j = 0; j < i; j++) {
@@ -129,6 +140,12 @@ function advance(flushWrite) {
     }
 
     const p = ps[currentPIndex++];
+    if (loop) {
+        let newP = p.cloneNode(true);
+        let content = document.getElementsByClassName("content")[0];
+        content.appendChild(newP);
+        ps.push(newP);
+    }
     let dt = getDt(p);
     p.style.display = "";
     writeText(p, dt);
