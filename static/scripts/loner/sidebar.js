@@ -6,7 +6,7 @@ function createOption(name, selected_name) {
 
 function createSidebar(active_name) {
     let html = ``
-    for (const name of ["ansiedade", "solitude", "mentiras"]) {
+    for (const name of ["ansiedade", "solitude", "mentiras", "altura"]) {
         html += createOption(name, active_name);
     }
 
