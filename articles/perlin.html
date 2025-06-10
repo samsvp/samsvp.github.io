@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <link rel="stylesheet" href="/static/styles/style.css">
+        <link rel="stylesheet" href="/static/styles/sidebar.css">
+        <link href='https://fonts.googleapis.com/css?family=Mulish' rel='stylesheet'>
+        <link rel="stylesheet"
+              href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/default.min.css">
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/glsl.min.js"></script>
+        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+        <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3.0.1/es5/tex-mml-chtml.js"></script>
+    </head>
+    <body>
+
+        <div class="sidebar">
+            <a href="/index.html">Home</a>
+            <a class="active" href="/articles.html">Articles</a>
+            <a href="#about">About</a>
+        </div>
+
+        <div class="content">
+
+            <h2> Perlin Noise </h2>
+
+            <p>
+            Perlin noise is a really simple (and reasonably cheap) algorithm for creating natural looking noise.
+            Perlin noise can be used to generate terrain, textures or to make abstract background art. This article
+            describes how to implement 2D and 3D Perlin noise using GLSL. Higher dimension's implementations follow
+            trivially from the 2D and 3D example.
+            </p>
+
+            <h2> Generating Pseudo Random Numbers on the GPU</h2>
+            <p>
+            All general purpose programming languages have a library to generate random numbers. Sadly, GLSL is not a
+            general purpose programming language. You can paste the following code to generate pseudo random numbers
+            from 2D and 3D vectors (and I mean it literally - GLSL has no native #include pre-procesor directive).
+            These functions will be used to generate randomness for our Perlin noise implementation.
+            </p>
+
+            <p>
+            <pre><code class="language-glsl">
+float rand1df(float v)
+{
+    return cos(v + cos(v * 90.1415) * 100.1415) * 0.5 + 0.5;
+}
+
+float rand1dv2s(vec2 co, vec2 seed)
+{
+    return fract(sin(dot(co, seed)) * 43758.5453);
+}
+
+float rand1dv2(vec2 co)
+{
+    return rand1dv2s(co, vec2(12.9898, 78.233));
+}
+
+vec2 rand2d(vec2 value)
+{
+    float angle = rand1dv2(value) * 6.28319;
+    return vec2(cos(angle), sin(angle));
+}
+
+float rand1dv3s(vec3 co, vec3 seed)
+{
+    return fract(sin(dot(co, seed)) * 43758.5453);
+}
+
+float rand1dv3(vec3 co)
+{
+    return rand1dv3s(co, vec3(12.9898, 78.233, 48.4867));
+}
+
+vec3 rand3d(vec3 value)
+{
+    float u = rand1dv3(value);
+    float v = rand1dv3(value + 1.0);
+
+    float theta = 6.28318530718 * u;
+    float phi = acos(1.0 - 2.0 * v);
+
+    return vec3(
+        sin(phi) * cos(theta),
+        sin(phi) * sin(theta),
+        cos(phi)
+    );
+}
+            </code></pre>
+            </p>
+
+            <h2>How Perlin noise works</h2>
+
+            <p>
+            Before we implement Perlin noise we must first understand how it works (obviously). Given
+            a \(N\)-dimensional space, define a \(N\)-dimensional grid and assign to each grid intersection
+            a \(n\)-dimensional unit vector. Then, for each point \(p\)in the space, find an offset
+            vector \(v\) defined as
+
+            <p style="text-align: center;">\(v_o = p - p_i,\)</p>
+
+            where \(i=1,2,...,n\) \(p_i\) is the coordinate of the \(i\)-th corner of the cell which
+            \(p\) is inside of.
+            <br>
+            Then, for each \(v_o\), take the dot product between it and the vectors \(v_{ci}\) associated
+            with each corner of the cell that \(p\) is inside of.
+
+            <p style="text-align: center;">\(x_i = v_o \cdot v_{ci},\)</p>
+
+            Finally, we take the fractional part of \(p\) and pass it through a non-linear function
+            \(f\). \(f\) is defined as
+
+            <p style="text-align: center;">\(f(p) = 6p^5 -15p^4 + 10p^3.\)</p>
+
+            <i>Note: \(f(p)\) operates on the vector \(p\) element wise.</i>
+            <br>
+
+            To mix the values we use a simple linear interpolation function in the form
+            <p style="text-align: center;">\(f_l(x, y, a) = (1 - a)x + ay,\)</p>
+            where \(x\) and \(y\) will be successive values of \(x_i\) and \(a\) will be one of the coordinates
+            from \(f(p)\)
+
+            </p>
+
+            <h2> Implementations </h2>
+            Here is the 2D Perlin Noise implementation (don't forget to paste the noise functions
+            when copying). The only implementation detail is that we don't actually create a true
+            grid, instead multiplying the uv coordinates to get a similar effect.
+
+            <pre><code class="language-glsl">
+vec2 fade(vec2 t)
+{
+    return t*t*t*(t*(t*6.0-15.0)+10.0);
+}
+
+float calc_dot(vec2 coord, vec2 dir)
+{
+    // get the random vector associated with the given grid intersection
+    vec2 grid = floor(coord);
+    vec2 gradient = rand2d(grid + dir);
+    // offset vector
+    vec2 d = fract(coord) - dir;
+    // final value
+    return dot(d, gradient);
+}
+
+float perlin(vec2 uv, float grid_size)
+{
+    // instead of actually generating a grid, just multiply the
+    // uv by the grid size for a similar effect
+    vec2 coord = uv * grid_size;
+
+    // do the dot product calculation
+    float bottom_left = calc_dot(coord, vec2(0, 0));
+    float top_left = calc_dot(coord, vec2(1, 0));
+    float top_right = calc_dot(coord, vec2(1, 1));
+    float bottom_right = calc_dot(coord, vec2(0, 1));
+
+    // take the fractional part of the current grid coordinate and
+    // pass it through the fade function
+    vec2 f = fade(fract(coord));
+    // mix the dot products
+    return mix(
+	mix(bottom_left, top_left, f.x),
+	mix(bottom_right, top_right, f.x),
+	f.y
+    );
+}
+
+void main()
+{
+    // normalize coordinates
+    vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.y, u_resolution.x);
+    float grid_size = 1.0;
+    float v = perlin(uv, grid_size);
+    gl_FragColor = vec4(vec3(v), 1);
+}
+            </code></pre>
+
+            And here is the 3D implementation:
+
+            <pre><code class="language-glsl">
+vec3 fade(vec3 t)
+{
+    return t*t*t*(t*(t*6.0-15.0)+10.0);
+}
+
+float calc_dot(vec3 coord, vec3 dir)
+{
+    vec3 grid = floor(coord);
+    vec3 gradient = rand3d(grid + dir);
+    vec3 d = fract(coord) - dir;
+    return dot(d, gradient);
+}
+
+float perlin(vec3 uv, float grid_size)
+{
+    vec3 coord = uv * grid_size;
+
+    float bottom_left_0 = calc_dot(coord, vec3(0, 0, 0));
+    float top_left_0 = calc_dot(coord, vec3(1, 0, 0));
+    float top_right_0 = calc_dot(coord, vec3(1, 1, 0));
+    float bottom_right_0 = calc_dot(coord, vec3(0, 1, 0));
+
+    float bottom_left_1 = calc_dot(coord, vec3(0, 0, 1));
+    float top_left_1 = calc_dot(coord, vec3(1, 0, 1));
+    float top_right_1 = calc_dot(coord, vec3(1, 1, 1));
+    float bottom_right_1 = calc_dot(coord, vec3(0, 1, 1));
+
+    vec3 f = fade(fract(coord));
+    float p0 = mix(
+        mix(bottom_left_0, top_left_0, f.x),
+        mix(bottom_right_0, top_right_0, f.x),
+        f.y
+    );
+
+    float p1 = mix(
+        mix(bottom_left_1, top_left_1, f.x),
+        mix(bottom_right_1, top_right_1, f.x),
+        f.y
+    );
+    return mix(p0, p1, f.z);
+}
+
+void main()
+{
+    // this works just like the 2D implementation
+    vec2 uv = (2.0 * gl_FragCoord.xy - u_resolution) / min(u_resolution.y, u_resolution.x);
+    float grid_size = 1.0;
+    float v = perlin(vec3(uv, u_time * 0.1), grid_size);
+    gl_FragColor = vec4(vec3(v), 1);
+}
+            </code></pre>
+
+            <h2> Useful Perlin Noise links </h2>
+            <p><a href="https://en.wikipedia.org/wiki/Perlin_noise">Wikipedia</a></p>
+            <p><a href="https://rtouti.github.io/graphics/perlin-noise-algorithm">
+                Explained JS Implementation
+            </a></p>
+            <p><a href="https://dl.acm.org/doi/pdf/10.1145/325165.325247">
+                The original Perlin noise paper: Perlin, Ken (July 1985). "An image synthesizer". ACM SIGGRAPH Computer Graphics.
+            </a></p>
+
+            <h2> Some useful random links </h2>
+            <p><a href="https://gist.github.com/patriciogonzalezvivo/670c22f3966e662d2f83">
+                A ton of noise algorithms in GLSL (Perlin shader and random functions included).
+            </a></p>
+            <p><a href="https://stackoverflow.com/questions/4200224/random-noise-functions-for-glsl">
+                Some nice RNG algorithms for GLSL.
+            </a></p>
+
+        </div>
+        <script>hljs.highlightAll();</script>
+
+    </body>
